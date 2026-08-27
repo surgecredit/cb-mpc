@@ -5,6 +5,7 @@
 #include <cbmpc/api/curve.h>
 #include <cbmpc/api/schnorr_mp.h>
 #include <cbmpc/c_api/schnorr_mp.h>
+#include <cbmpc/core/bip32_path.h>
 #include <cbmpc/core/buf.h>
 #include <cbmpc/core/error.h>
 #include <cbmpc/core/job.h>
@@ -449,6 +450,32 @@ cbmpc_error_t cbmpc_schnorr_mp_attach_private_scalar(cmem_t public_key_blob, cme
         view_cmem(public_key_blob), view_cmem(private_scalar_fixed), view_cmem(public_share_compressed), merged);
     if (rv) return rv;
     return alloc_cmem_from_buf(merged, out_key_blob);
+  } catch (const std::bad_alloc&) {
+    if (out_key_blob) *out_key_blob = cmem_t{nullptr, 0};
+    return E_INSUFFICIENT;
+  } catch (...) {
+    if (out_key_blob) *out_key_blob = cmem_t{nullptr, 0};
+    return E_GENERAL;
+  }
+}
+
+cbmpc_error_t cbmpc_schnorr_mp_derive_non_hardened(cmem_t key_blob, cmem_t chain_code, const uint32_t* path,
+                                                   size_t path_len, cmem_t* out_key_blob) {
+  try {
+    if (!out_key_blob) return E_BADARG;
+    *out_key_blob = cmem_t{nullptr, 0};
+    if (const auto v = validate_cmem(key_blob)) return v;
+    if (const auto v = validate_cmem(chain_code)) return v;
+    if (!path || path_len == 0) return E_BADARG;
+
+    coinbase::api::bip32_path_t p;
+    p.indices.assign(path, path + path_len);
+    std::vector<coinbase::buf_t> out;
+    const coinbase::error_t rv =
+        coinbase::api::schnorr_mp::derive_non_hardened(view_cmem(key_blob), view_cmem(chain_code), {p}, out);
+    if (rv) return rv;
+    if (out.size() != 1) return E_GENERAL;
+    return alloc_cmem_from_buf(out[0], out_key_blob);
   } catch (const std::bad_alloc&) {
     if (out_key_blob) *out_key_blob = cmem_t{nullptr, 0};
     return E_INSUFFICIENT;

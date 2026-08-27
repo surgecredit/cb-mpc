@@ -159,6 +159,16 @@ cbmpc_error_t cbmpc_schnorr_mp_detach_private_scalar(cmem_t key_blob, cmem_t* ou
 cbmpc_error_t cbmpc_schnorr_mp_attach_private_scalar(cmem_t public_key_blob, cmem_t private_scalar_fixed,
                                                      cmem_t public_share_compressed, cmem_t* out_key_blob);
 
+// Non-hardened BIP-32 derivation of an additive key blob. `chain_code` is 32
+// bytes; `path` is `path_len` child indices, all below 0x80000000.
+//
+// Ownership:
+// - On success, `out_key_blob->data` is allocated by the library and must be
+//   freed with `cbmpc_cmem_free(*out_key_blob)`.
+// - On failure, `*out_key_blob` is set to `{NULL, 0}`.
+cbmpc_error_t cbmpc_schnorr_mp_derive_non_hardened(cmem_t key_blob, cmem_t chain_code, const uint32_t* path,
+                                                   size_t path_len, cmem_t* out_key_blob);
+
 #ifdef __cplusplus
 }
 #endif
