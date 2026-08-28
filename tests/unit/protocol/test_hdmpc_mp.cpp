@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <string>
+
 #include <cbmpc/internal/core/log.h>
 #include <cbmpc/internal/protocol/hd_keyset_mp.h>
 #include <cbmpc/internal/protocol/schnorr_mp.h>
@@ -125,6 +127,65 @@ TEST_F(HDMPC_MP, RejectsBadInput) {
   broken = keys[0];
   MODULO(broken.curve.order()) broken.x_share = broken.x_share + 1;
   EXPECT_NE(normal_derive_mp(broken, chain_code, {path({0})}, out), 0);
+}
+
+// Fixed vector from an independent BIP-32 implementation (@scure/bip32 1.x,
+// secp256k1): parent key d, chain code cc, and the expected public children.
+// The shares below are an arbitrary additive split of d, so the MPC child must
+// equal the wallet-side child byte for byte. This is the test that catches a
+// drift in the HMAC input serialization (compressed parent, big-endian index).
+TEST_F(HDMPC_MP, MatchesReferenceBIP32Vector) {
+  auto hex_bytes = [](const std::string& hex) {
+    buf_t out(int(hex.size() / 2));
+    for (size_t i = 0; i < hex.size() / 2; i++) out[int(i)] = uint8_t(std::stoul(hex.substr(2 * i, 2), nullptr, 16));
+    return out;
+  };
+  const bn_t d = bn_t::from_hex("d52a2a1247cf4665bc0872dc0f58b15d065afd62564a81f2d6bf89d3a3a1cabf");
+  const buf_t cc = hex_bytes("a6efb1135822f18d4027a5aabe4329c2b5e7392e943253a791fd531d4abe86f0");
+  const buf_t parent = hex_bytes("039385f8ae59c2e08468eb177f12b9d58a86b575a1bc56cdad7da13daba320ee42");
+  struct vec_t {
+    std::vector<uint32_t> path;
+    std::string child;
+  };
+  const std::vector<vec_t> vectors = {
+      {{0, 0}, "0365fd62426227ec7ba8300fd5f4b31d5ac2ab8ba4a6d757266c2429271a803ed9"},
+      {{2, 0}, "03479c70843307c737859118a303f66e67a70e986d5d3715cda71cdde55d278e38"},
+      {{1, 2, 3}, "03df8ac30386639c60001226bafad6cb7582a72c24ee708497bef490f51eab3d6c"},
+  };
+
+  ecurve_t curve = crypto::curve_secp256k1;
+  const auto& G = curve.generator();
+  const mod_t& q = curve.order();
+  crypto::vartime_scope_t vartime_scope;
+  EXPECT_EQ((d * G).to_compressed_bin(), parent);
+
+  // Two-party additive split of d.
+  bn_t x1 = bn_t::from_hex("1111111111111111111111111111111111111111111111111111111111111111");
+  bn_t x2;
+  MODULO(q) x2 = d - x1;
+  std::vector<eckey::key_share_mp_t> shares(2);
+  const crypto::pname_t names[2] = {"alpha", "beta"};
+  const bn_t xs[2] = {x1, x2};
+  for (int i = 0; i < 2; i++) {
+    shares[i].curve = curve;
+    shares[i].party_name = names[i];
+    shares[i].x_share = xs[i];
+    shares[i].Q = d * G;
+    shares[i].Qis[names[0]] = x1 * G;
+    shares[i].Qis[names[1]] = x2 * G;
+  }
+
+  for (const vec_t& v : vectors) {
+    bip32_path_t p;
+    for (uint32_t i : v.path) p.append(i);
+    std::vector<eckey::key_share_mp_t> derived[2];
+    for (int i = 0; i < 2; i++) {
+      ASSERT_EQ(normal_derive_mp(shares[i], cc, {p}, derived[i]), 0);
+      ASSERT_EQ(derived[i].size(), 1u);
+      EXPECT_EQ(derived[i][0].Q.to_compressed_bin(), hex_bytes(v.child));
+    }
+    check_keys({derived[0][0], derived[1][0]});
+  }
 }
 
 }  // namespace
