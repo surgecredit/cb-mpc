@@ -42,13 +42,16 @@ error_t strict_non_hard_delta(const ecc_point_t& Q, mem_t chain_code, const bip3
 error_t normal_derive_mp(const eckey::key_share_mp_t& key, mem_t chain_code,
                          const std::vector<bip32_path_t>& non_hardened_paths,
                          std::vector<eckey::key_share_mp_t>& derived_keys) {
+  // `key` may alias an element of `derived_keys` (chained derivation); copy it
+  // before the output is cleared.
+  const eckey::key_share_mp_t src = key;
   derived_keys.clear();
 
   if (chain_code.data == nullptr || chain_code.size != 32) {
     return coinbase::error(E_BADARG, "chain_code must be 32 bytes");
   }
-  if (key.Qis.empty()) return coinbase::error(E_BADARG, "missing Qis");
-  if (key.Qis.find(key.party_name) == key.Qis.end()) return coinbase::error(E_BADARG, "party_name not in Qis");
+  if (src.Qis.empty()) return coinbase::error(E_BADARG, "missing Qis");
+  if (src.Qis.find(src.party_name) == src.Qis.end()) return coinbase::error(E_BADARG, "party_name not in Qis");
   if (non_hardened_paths.empty()) return coinbase::error(E_BADARG, "no paths");
   if ((int)non_hardened_paths.size() > MAX_PATHS_PER_CALL) return coinbase::error(E_BADARG, "too many paths");
   if (bip32_path_t::has_duplicate(non_hardened_paths)) return coinbase::error(E_BADARG, "duplicate paths");
@@ -60,18 +63,18 @@ error_t normal_derive_mp(const eckey::key_share_mp_t& key, mem_t chain_code,
     }
   }
 
-  ecurve_t curve = key.curve;
+  ecurve_t curve = src.curve;
   const auto& G = curve.generator();
   const mod_t& q = curve.order();
 
-  if (key.x_share * G != key.Qis.at(key.party_name)) return coinbase::error(E_BADARG, "x_share does not match Qi");
-  if (SUM(key.Qis) != key.Q) return coinbase::error(E_BADARG, "Q does not match the sum of Qis");
+  if (src.x_share * G != src.Qis.at(src.party_name)) return coinbase::error(E_BADARG, "x_share does not match Qi");
+  if (SUM(src.Qis) != src.Q) return coinbase::error(E_BADARG, "Q does not match the sum of Qis");
 
   // party_map_t is ordered by name, so every party picks the same one.
-  const crypto::pname_t& first = key.Qis.begin()->first;
+  const crypto::pname_t& first = src.Qis.begin()->first;
   std::vector<bn_t> delta(non_hardened_paths.size());
   for (size_t i = 0; i < non_hardened_paths.size(); i++) {
-    error_t rv = strict_non_hard_delta(key.Q, chain_code, non_hardened_paths[i], curve, delta[i]);
+    error_t rv = strict_non_hard_delta(src.Q, chain_code, non_hardened_paths[i], curve, delta[i]);
     if (rv) return rv;
   }
 
@@ -79,12 +82,12 @@ error_t normal_derive_mp(const eckey::key_share_mp_t& key, mem_t chain_code,
   derived_keys.resize(n);
   for (int i = 0; i < n; i++) {
     eckey::key_share_mp_t& derived = derived_keys[i];
-    derived = key;
+    derived = src;
     ecc_point_t delta_G = delta[i] * G;
-    derived.Q = key.Q + delta_G;
-    derived.Qis[first] = key.Qis.at(first) + delta_G;
-    if (key.party_name == first) {
-      MODULO(q) derived.x_share = key.x_share + delta[i];
+    derived.Q = src.Q + delta_G;
+    derived.Qis[first] = src.Qis.at(first) + delta_G;
+    if (src.party_name == first) {
+      MODULO(q) derived.x_share = src.x_share + delta[i];
     }
   }
 
