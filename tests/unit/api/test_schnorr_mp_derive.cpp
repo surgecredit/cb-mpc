@@ -109,6 +109,17 @@ TEST(SchnorrMPDerive, RejectsAcBlobAndHardened) {
                                                            {bip32_path_t{{0}}}, out),
             SUCCESS);
   EXPECT_NE(coinbase::api::schnorr_mp::derive_non_hardened(buf_t(8), chain_code, {bip32_path_t{{0}}}, out), SUCCESS);
+
+  // Bounds are enforced at this layer too, before the blob is parsed.
+  {
+    std::vector<bip32_path_t> too_many;
+    for (uint32_t i = 0; i < 257; i++) too_many.push_back(bip32_path_t{{i}});
+    EXPECT_NE(coinbase::api::schnorr_mp::derive_non_hardened(keys[0], chain_code, too_many, out), SUCCESS);
+    bip32_path_t too_deep;
+    too_deep.indices.assign(256, 0);
+    EXPECT_NE(coinbase::api::schnorr_mp::derive_non_hardened(keys[0], chain_code, {too_deep}, out), SUCCESS);
+    EXPECT_NE(coinbase::api::schnorr_mp::derive_non_hardened(keys[0], chain_code, {}, out), SUCCESS);
+  }
 }
 
 }  // namespace

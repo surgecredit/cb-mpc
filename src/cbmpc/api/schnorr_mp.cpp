@@ -549,6 +549,13 @@ error_t derive_non_hardened(mem_t key_blob, mem_t chain_code, const std::vector<
                                                             coinbase::api::detail::MAX_OPAQUE_BLOB_SIZE))
     return rv;
   if (chain_code.size != 32) return coinbase::error(E_BADARG, "chain_code must be 32 bytes");
+  // Same bounds the protocol layer enforces, checked before the O(n) duplicate
+  // scan and before any blob is parsed.
+  if (non_hardened_paths.empty()) return coinbase::error(E_BADARG, "no paths");
+  if (non_hardened_paths.size() > 256) return coinbase::error(E_BADARG, "too many paths");
+  for (const bip32_path_t& p : non_hardened_paths) {
+    if (p.indices.empty() || p.indices.size() > 255) return coinbase::error(E_BADARG, "invalid path depth");
+  }
   if (rv = coinbase::api::detail::validate_no_duplicate_bip32_paths(non_hardened_paths)) return rv;
 
   key_blob_v1_t blob;

@@ -160,7 +160,9 @@ cbmpc_error_t cbmpc_schnorr_mp_attach_private_scalar(cmem_t public_key_blob, cme
                                                      cmem_t public_share_compressed, cmem_t* out_key_blob);
 
 // Non-hardened BIP-32 derivation of an additive key blob. `chain_code` is 32
-// bytes; `path` is `path_len` child indices, all below 0x80000000.
+// bytes; `path` is `path_len` child indices, all below 0x80000000, with
+// 1 <= `path_len` <= 255 (BIP-32 depth is a single byte). Anything else is
+// E_BADARG before any allocation.
 //
 // Ownership:
 // - On success, `out_key_blob->data` is allocated by the library and must be
