@@ -101,6 +101,23 @@ TEST_F(HDMPC_MP, RejectsBadInput) {
   EXPECT_NE(normal_derive_mp(keys[0], chain_code, {path({0x80000000u})}, out), 0);
   EXPECT_NE(normal_derive_mp(keys[0], chain_code, {path({0}), path({0})}, out), 0);
 
+  // A null chain code with a plausible size must be rejected before use.
+  EXPECT_NE(normal_derive_mp(keys[0], mem_t(nullptr, 32), {path({0})}, out), 0);
+
+  // BIP-32 depth is one byte: 255 levels is the most a path can have.
+  {
+    bip32_path_t too_deep;
+    for (int i = 0; i < 256; i++) too_deep.append(0);
+    EXPECT_NE(normal_derive_mp(keys[0], chain_code, {too_deep}, out), 0);
+  }
+
+  // Bound the number of paths derived in one call.
+  {
+    std::vector<bip32_path_t> too_many;
+    for (uint32_t i = 0; i < 257; i++) too_many.push_back(path({i}));
+    EXPECT_NE(normal_derive_mp(keys[0], chain_code, too_many, out), 0);
+  }
+
   eckey::key_share_mp_t broken = keys[0];
   broken.Q += broken.curve.generator();
   EXPECT_NE(normal_derive_mp(broken, chain_code, {path({0})}, out), 0);
