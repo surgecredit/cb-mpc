@@ -157,6 +157,12 @@ error_t attach_private_scalar(mem_t public_key_blob, mem_t private_scalar_fixed,
 //
 // Only additive blobs (from `dkg_additive`) are accepted. Threshold blobs must
 // be converted to additive shares first.
+//
+// Derived blobs carry no chain code and no depth. Do not derive from a derived
+// blob: the result is self-consistent but not BIP-32, and no wallet can
+// reproduce it. Always derive from the root blob with the full path. An index
+// whose child is invalid under BIP-32 (I_L >= n, or point at infinity) is an
+// error here rather than skipped; callers should treat it as "unusable index".
 error_t derive_non_hardened(mem_t key_blob, mem_t chain_code, const std::vector<bip32_path_t>& non_hardened_paths,
                             std::vector<buf_t>& out_key_blobs);
 

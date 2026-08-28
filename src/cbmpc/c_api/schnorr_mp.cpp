@@ -466,7 +466,8 @@ cbmpc_error_t cbmpc_schnorr_mp_derive_non_hardened(cmem_t key_blob, cmem_t chain
     *out_key_blob = cmem_t{nullptr, 0};
     if (const auto v = validate_cmem(key_blob)) return v;
     if (const auto v = validate_cmem(chain_code)) return v;
-    if (!path || path_len == 0) return E_BADARG;
+    // BIP-32 depth is one byte; refuse before the allocation below.
+    if (!path || path_len == 0 || path_len > 255) return E_BADARG;
 
     coinbase::api::bip32_path_t p;
     p.indices.assign(path, path + path_len);

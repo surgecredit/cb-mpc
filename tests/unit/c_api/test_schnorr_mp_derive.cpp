@@ -122,4 +122,8 @@ TEST(CApiSchnorrMpDerive, RejectsBadArgs) {
   ASSERT_NE(cbmpc_schnorr_mp_derive_non_hardened(cmem_t{junk, 8}, cmem_t{cc, 32}, path, 0, &out), CBMPC_SUCCESS);
   ASSERT_NE(cbmpc_schnorr_mp_derive_non_hardened(cmem_t{junk, 8}, cmem_t{cc, 32}, nullptr, 1, &out), CBMPC_SUCCESS);
   ASSERT_EQ(cbmpc_schnorr_mp_derive_non_hardened(cmem_t{junk, 8}, cmem_t{cc, 32}, path, 1, nullptr), E_BADARG);
+  // A path deeper than BIP-32 allows is refused before anything is allocated.
+  std::vector<uint32_t> too_deep(256, 0);
+  ASSERT_EQ(cbmpc_schnorr_mp_derive_non_hardened(cmem_t{junk, 8}, cmem_t{cc, 32}, too_deep.data(), 256, &out), E_BADARG);
+  ASSERT_EQ(out.data, nullptr);
 }
