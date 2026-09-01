@@ -5,9 +5,11 @@
 
 #include <cbmpc/api/schnorr_mp.h>
 #include <cbmpc/internal/core/convert.h>
+#include <cbmpc/internal/protocol/hd_keyset_mp.h>
 #include <cbmpc/internal/protocol/schnorr_mp.h>
 
 #include "access_structure_util.h"
+#include "hd_keyset_util.h"
 #include "job_util.h"
 #include "mem_util.h"
 
@@ -536,6 +538,67 @@ error_t attach_private_scalar(mem_t public_key_blob, mem_t private_scalar_fixed,
 
   blob.x_share = std::move(x);
   out_key_blob = coinbase::convert(blob);
+  return SUCCESS;
+}
+
+error_t derive_non_hardened(mem_t key_blob, mem_t chain_code, const std::vector<bip32_path_t>& non_hardened_paths,
+                            std::vector<buf_t>& out_key_blobs) {
+  out_key_blobs.clear();
+  error_t rv = UNINITIALIZED_ERROR;
+  if (rv = coinbase::api::detail::validate_mem_arg_max_size(key_blob, "key_blob",
+                                                            coinbase::api::detail::MAX_OPAQUE_BLOB_SIZE))
+    return rv;
+  if (chain_code.size != 32) return coinbase::error(E_BADARG, "chain_code must be 32 bytes");
+  // Same bounds the protocol layer enforces, checked before the O(n) duplicate
+  // scan and before any blob is parsed.
+  if (non_hardened_paths.empty()) return coinbase::error(E_BADARG, "no paths");
+  if (non_hardened_paths.size() > 256) return coinbase::error(E_BADARG, "too many paths");
+  for (const bip32_path_t& p : non_hardened_paths) {
+    if (p.indices.empty() || p.indices.size() > 255) return coinbase::error(E_BADARG, "invalid path depth");
+  }
+  if (rv = coinbase::api::detail::validate_no_duplicate_bip32_paths(non_hardened_paths)) return rv;
+
+  key_blob_v1_t blob;
+  if (rv = coinbase::convert(blob, key_blob)) return rv;
+  if (blob.version != key_blob_version_v1) return coinbase::error(E_BADARG, "derive requires an additive key blob");
+  if (static_cast<curve_id>(blob.curve) != curve_id::secp256k1)
+    return coinbase::error(E_FORMAT, "invalid key blob curve");
+  if (blob.party_name.empty()) return coinbase::error(E_FORMAT, "invalid key blob");
+
+  const auto curve = coinbase::crypto::curve_secp256k1;
+  const coinbase::crypto::mod_t& q = curve.order();
+  if (!q.is_in_range(blob.x_share)) return coinbase::error(E_FORMAT, "invalid key blob");
+
+  coinbase::mpc::schnorrmp::key_t key;
+  key.curve = curve;
+  key.party_name = blob.party_name;
+  key.x_share = blob.x_share;
+  if (rv = key.Q.from_bin(curve, blob.Q_compressed)) return coinbase::error(rv, "invalid key blob");
+  if (rv = curve.check(key.Q)) return coinbase::error(rv, "invalid key blob");
+  std::vector<std::string_view> party_names;
+  for (const auto& [name, qi_bin] : blob.Qis_compressed) {
+    coinbase::crypto::ecc_point_t Qi;
+    if (rv = Qi.from_bin(curve, qi_bin)) return coinbase::error(rv, "invalid key blob");
+    if (rv = curve.check(Qi)) return coinbase::error(rv, "invalid key blob");
+    key.Qis[name] = Qi;
+    party_names.emplace_back(name);
+  }
+
+  std::vector<coinbase::mpc::bip32_path_t> paths;
+  paths.reserve(non_hardened_paths.size());
+  for (const auto& path : non_hardened_paths) paths.push_back(coinbase::api::detail::to_internal_bip32_path(path));
+
+  std::vector<coinbase::mpc::schnorrmp::key_t> derived;
+  if (rv = coinbase::mpc::normal_derive_mp(key, chain_code, paths, derived)) return rv;
+
+  out_key_blobs.resize(derived.size());
+  for (size_t i = 0; i < derived.size(); i++) {
+    if (rv = serialize_key_blob_for_party_names(party_names, blob.party_name, derived[i], key_blob_version_v1,
+                                                out_key_blobs[i])) {
+      out_key_blobs.clear();
+      return rv;
+    }
+  }
   return SUCCESS;
 }
 
