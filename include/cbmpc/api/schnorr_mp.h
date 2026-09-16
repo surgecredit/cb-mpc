@@ -2,6 +2,7 @@
 
 #include <cbmpc/api/curve.h>
 #include <cbmpc/core/access_structure.h>
+#include <cbmpc/core/bip32_path.h>
 #include <cbmpc/core/buf.h>
 #include <cbmpc/core/error.h>
 #include <cbmpc/core/job.h>
@@ -149,5 +150,20 @@ error_t detach_private_scalar(mem_t key_blob, buf_t& out_public_key_blob, buf_t&
 //   this party's share public point (Qi_self), e.g. from `get_public_share_compressed`.
 error_t attach_private_scalar(mem_t public_key_blob, mem_t private_scalar_fixed, mem_t public_share_compressed,
                               buf_t& out_key_blob);
+
+// Non-hardened BIP-32 derivation of an additive key blob, done locally by each
+// party. `chain_code` is 32 bytes. Every party must derive the same paths from
+// the same blob; the resulting blobs sign together like the parent.
+//
+// Only additive blobs (from `dkg_additive`) are accepted. Threshold blobs must
+// be converted to additive shares first.
+//
+// Derived blobs carry no chain code and no depth. Do not derive from a derived
+// blob: the result is self-consistent but not BIP-32, and no wallet can
+// reproduce it. Always derive from the root blob with the full path. An index
+// whose child is invalid under BIP-32 (I_L >= n, or point at infinity) is an
+// error here rather than skipped; callers should treat it as "unusable index".
+error_t derive_non_hardened(mem_t key_blob, mem_t chain_code, const std::vector<bip32_path_t>& non_hardened_paths,
+                            std::vector<buf_t>& out_key_blobs);
 
 }  // namespace coinbase::api::schnorr_mp

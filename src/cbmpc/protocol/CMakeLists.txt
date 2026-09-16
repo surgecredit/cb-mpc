@@ -25,6 +25,7 @@ target_sources(cbmpc_protocol  PRIVATE
   hd_tree_bip32.cpp
   hd_keyset_ecdsa_2p.cpp
   hd_keyset_eddsa_2p.cpp
+  hd_keyset_mp.cpp
 )
 
 target_link_libraries(cbmpc_protocol cbmpc_zk)
