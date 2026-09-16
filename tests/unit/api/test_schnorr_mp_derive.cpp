@@ -122,8 +122,7 @@ TEST(SchnorrMPDerive, RejectsAcBlobAndHardened) {
 
   std::vector<buf_t> out;
   const buf_t chain_code = coinbase::crypto::gen_random(32);
-  EXPECT_EQ(coinbase::api::schnorr_mp::derive_non_hardened(ac_keys[0], chain_code, {bip32_path_t{{0}}}, out),
-            E_BADARG);
+  EXPECT_EQ(coinbase::api::schnorr_mp::derive_non_hardened(ac_keys[0], chain_code, {bip32_path_t{{0}}}, out), E_BADARG);
   EXPECT_NE(coinbase::api::schnorr_mp::derive_non_hardened(keys[0], chain_code, {bip32_path_t{{0x80000000u}}}, out),
             SUCCESS);
   EXPECT_NE(coinbase::api::schnorr_mp::derive_non_hardened(keys[0], coinbase::crypto::gen_random(16),

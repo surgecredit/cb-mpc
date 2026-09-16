@@ -17,8 +17,8 @@ constexpr int MAX_PATHS_PER_CALL = 256;
 // skip such an index; every wallet library we interoperate with (btcec,
 // bitcoinjs, scure) throws on it, so the cluster must refuse it too or it would
 // sign for a key no wallet can reproduce. Probability is about 2^-128 per step.
-error_t strict_non_hard_delta(const ecc_point_t& Q, mem_t chain_code, const bip32_path_t& path,
-                              const ecurve_t& curve, bn_t& delta) {
+error_t strict_non_hard_delta(const ecc_point_t& Q, mem_t chain_code, const bip32_path_t& path, const ecurve_t& curve,
+                              bn_t& delta) {
   const auto& G = curve.generator();
   const mod_t& q = curve.order();
   buf_t chain_code_temp = chain_code;

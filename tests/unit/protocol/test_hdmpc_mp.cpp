@@ -1,5 +1,4 @@
 #include <gtest/gtest.h>
-
 #include <string>
 
 #include <cbmpc/internal/core/log.h>
