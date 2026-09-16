@@ -6,6 +6,7 @@
 
 #include <cbmpc/api/curve.h>
 #include <cbmpc/api/schnorr_mp.h>
+#include <cbmpc/core/access_structure.h>
 #include <cbmpc/core/bip32_path.h>
 #include <cbmpc/internal/crypto/base.h>
 
@@ -101,8 +102,28 @@ TEST(SchnorrMPDerive, RejectsAcBlobAndHardened) {
       rvs);
   for (auto rv : rvs) ASSERT_EQ(rv, SUCCESS);
 
+  // An access-structure blob holds a Shamir share. Adding the delta to it does
+  // not add the delta to the secret, so derive refuses it and leaves the caller
+  // to run to_additive_share for the online quorum first.
+  const coinbase::api::access_structure_t ac =
+      coinbase::api::access_structure_t::Threshold(2, {
+                                                          coinbase::api::access_structure_t::leaf(names[0]),
+                                                          coinbase::api::access_structure_t::leaf(names[1]),
+                                                      });
+  std::vector<buf_t> ac_keys(n), ac_sids(n);
+  run_mp(
+      peers,
+      [&](int i) {
+        job_mp_t job{static_cast<party_idx_t>(i), name_views, *transports[i]};
+        return coinbase::api::schnorr_mp::dkg_ac(job, curve_id::secp256k1, ac_sids[i], ac, name_views, ac_keys[i]);
+      },
+      rvs);
+  for (auto rv : rvs) ASSERT_EQ(rv, SUCCESS);
+
   std::vector<buf_t> out;
   const buf_t chain_code = coinbase::crypto::gen_random(32);
+  EXPECT_EQ(coinbase::api::schnorr_mp::derive_non_hardened(ac_keys[0], chain_code, {bip32_path_t{{0}}}, out),
+            E_BADARG);
   EXPECT_NE(coinbase::api::schnorr_mp::derive_non_hardened(keys[0], chain_code, {bip32_path_t{{0x80000000u}}}, out),
             SUCCESS);
   EXPECT_NE(coinbase::api::schnorr_mp::derive_non_hardened(keys[0], coinbase::crypto::gen_random(16),
